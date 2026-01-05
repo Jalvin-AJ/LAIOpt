@@ -95,6 +95,27 @@ def plot_placement(
         visual_x = x + margin
         visual_y = y + margin
         
+        # Calculate halo dimensions (centered on block)
+        halo_margin = 0.12 * min(block.width, block.height)
+        halo_width = block.width + 2 * halo_margin
+        halo_height = block.height + 2 * halo_margin
+        
+        # Draw halo (behind the block)
+        halo_x = visual_x - halo_margin
+        halo_y = visual_y - halo_margin
+        halo_rect = Rectangle(
+            (halo_x, halo_y),
+            halo_width,
+            halo_height,
+            fill=False,
+            edgecolor="gray",
+            linestyle="--",
+            linewidth=1.0,
+            alpha=0.6
+        )
+        ax.add_patch(halo_rect)
+        
+        # Draw block rectangle
         rect = Rectangle(
             (visual_x, visual_y),
             block.width,
