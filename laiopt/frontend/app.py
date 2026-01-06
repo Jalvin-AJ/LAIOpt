@@ -163,7 +163,10 @@ if run_button:
     baseline = baseline_place(blocks, die)
     baseline_cost = total_cost(baseline, blocks, nets, die)
 
-    optimized, opt_cost = simulated_annealing(blocks, nets, die, random_seed=42)
+    optimized, opt_cost, cost_history = simulated_annealing(
+    blocks, nets, die, random_seed=42
+)
+
 
     st.subheader("Placement Comparison")
     col1, col2 = st.columns(2)
