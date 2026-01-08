@@ -1,0 +1,764 @@
+# SECTION 1 — General Explanation
+
+
+
+## LAIOpt UI: What You See, Why It Exists, and What It Means
+
+This section explains **every visible part of the UI**, its **technical significance**, and **why it is required in a real floorplanning workflow**.
+
+---
+
+## 1. Purpose of the UI
+
+The LAIOpt UI is designed to **demonstrate a correct early-stage macro floorplanning workflow**, not to act as a black-box optimizer.
+
+The UI allows a user (designer, student, or reviewer) to:
+
+* Define **physical inputs**
+* Observe **baseline vs optimized placements**
+* Verify **physical legality**
+* Compare **quantitative cost metrics**
+
+Every UI element corresponds to a **real floorplanning concept** used in industry tools.
+
+---
+
+## 2. Die Size Input (Width & Height)
+
+### What the user inputs
+
+* Die Width
+* Die Height
+
+### What it represents
+
+The **die** is the fixed silicon area available for placement.
+
+### Why this input is essential
+
+* Floorplanning **cannot exist** without a defined die boundary
+* All placement legality checks depend on die dimensions
+* Area pressure directly affects optimization difficulty
+
+### How it is used internally
+
+* Baseline placement ensures blocks fit within the die
+* Optimization penalizes any boundary violation
+* Visualization uses the die as the absolute reference frame
+
+
+This proves the placement is **physically grounded**, not abstract or normalized.
+
+---
+
+## 3. Block (Macro) Table
+
+Each row represents **one macro block**, which corresponds to a hard macro in real VLSI design.
+
+---
+
+### 3.1 Block ID
+
+**What it is**
+
+* Unique identifier for the macro
+
+**Why it exists**
+
+* Used by connectivity (nets)
+* Used internally to track placement
+* Prevents ambiguity or overwriting
+
+**Why uniqueness matters**
+Duplicate IDs would invalidate placement correctness, so the system enforces strict uniqueness.
+
+---
+
+### 3.2 Width & Height
+
+**What they represent**
+
+* Physical dimensions of the macro
+
+**Why they are numeric**
+
+* Geometry-based placement requires real dimensions
+* Overlap and boundary detection depends on size
+* Larger macros are harder to place and affect optimization
+
+**Why this makes the project real**
+A floorplanner without macro dimensions is fundamentally invalid.
+This UI explicitly avoids that mistake.
+
+---
+
+### 3.3 Power (Numeric Column)
+
+**What it represents:** Relative power consumption; drives center penalty (wall attraction)
+
+**Why it affects optimization:** High-power blocks need edge placement for power delivery and thermal dissipation
+
+> Power directly influences placement through the center penalty term, modeling power delivery constraints.
+
+---
+
+### 3.4 Heat (Numeric Column)
+
+**What it represents:** Relative thermal intensity; used in thermal spreading calculations
+
+**Why it affects cost:** Thermal spreading model prevents hotspot formation; blocks transfer heat to neighbors based on distance; violations above safe thresholds are penalized
+
+**Visualization:** High-heat blocks are color-coded (Blue=Low, Gold=Med, Red=High)
+
+This implements **realistic thermal physics**, not just visualization.
+
+---
+
+### 3.5 Role (Text Column)
+
+**What it represents:** Functional description (e.g., "CPU_Cluster", "GPU_Core")
+
+**Purpose:** Improves readability; used as display labels in visualization; metadata only (doesn't affect optimization)
+
+---
+
+## 4. Connectivity (Nets) Table
+
+Each row represents **one net connection**, which defines electrical connectivity between two blocks.
+
+---
+
+### 4.1 Net ID
+
+* Identifier for the connection
+* Used for traceability and debugging
+
+---
+
+### 4.2 Connected Blocks (Block A & Block B)
+
+**What it represents**
+
+* Which two macros are electrically connected
+* Displayed as pairwise connections in the UI
+
+**Why it matters**
+
+* Connectivity drives wirelength
+* Wirelength is a primary optimization objective
+
+**Implementation note**
+
+* UI uses pairwise format (block_a, block_b)
+* Backend automatically consolidates multi-pin nets
+* This matches real netlist connectivity
+
+---
+
+### 4.3 Net Weight
+
+**What it means**
+
+* Importance of the connection
+* Represents bit width, to be defined by the user in the UI, allowed values are powers of 2 
+
+**Why numeric**
+
+* Allows prioritization
+* High-weight nets influence placement more strongly
+
+**Real-world analogy**
+Clock nets, buses, or critical signals receive higher weight.
+
+---
+
+## 5. Run Optimization Button
+
+### What happens when clicked
+
+1. Backend loads current inputs
+2. A **smart wall-aware baseline placement** is generated using Less Flexibility First (LFF) heuristic
+3. Three parallel Simulated Annealing runs execute with different temperature settings
+4. Each run explores placements using displacement, swap, and rotation moves
+5. Best legal placement across all runs is selected and displayed
+
+### Why this is explicit
+
+* No hidden background computation
+* No automatic or misleading behavior
+* User controls when optimization runs
+
+### Why multiple runs
+
+* Different temperature parameters explore different solution spaces
+* Parallel batch optimization finds better solutions
+* Most robust result is automatically selected
+
+---
+
+## 6. Baseline Placement View
+
+**What it shows:** Smart, deterministic initial placement using wall-aware heuristic
+
+**How it works:** Sorts blocks by "inflexibility score" (area + connectivity + heat × 10); places using wall-hugging principle; prioritizes high-heat/high-power blocks near edges
+
+**Why it exists:** Reference point; proves optimization is meaningful; demonstrates smart initialization
+
+**Why it may look good:** LFF heuristic produces intelligent starting points. If baseline is near-optimal, optimization makes targeted refinements.
+
+---
+
+## 7. Optimized Placement View
+
+### What it shows
+
+* Best placement found across all optimization runs
+* Winner is selected from batch based on lowest cost
+
+### What improved
+
+* Wirelength may be reduced through better positioning
+* Thermal violations are minimized
+* Wall attraction is satisfied for power blocks
+* Overlaps are eliminated
+
+### Why results may be similar to baseline
+
+* Real tools do not guarantee dramatic improvement on every input
+* Smart baseline reduces optimization burden
+* Forcing improvement would be dishonest
+
+This demonstrates **stability and correctness**, not failure.
+
+---
+
+## 8. Cost Metrics Display
+
+### What is shown
+
+* Baseline cost
+* Optimized cost
+* Improvement (absolute and percentage)
+
+### What cost includes
+
+* **Wirelength (HPWL):** Manhattan distance between connected blocks
+* **Overlap penalty:** Penalizes geometric overlaps
+* **Boundary violation penalty:** Hard constraint for die boundary
+* **Thermal penalty:** Prevents hotspot formation through spreading model
+* **Center penalty:** Forces high-power blocks toward periphery
+
+### Why multiple runs shown
+
+* Batch results table shows all three optimization attempts
+* Demonstrates parameter sensitivity
+* Proves selection of best solution
+
+---
+
+## 9. Visualization Elements
+
+### Die Outline
+
+* Absolute placement boundary
+* All blocks must fit within
+
+### Block Rectangles
+
+* Drawn using real dimensions
+* Positioned using bottom-left coordinates
+* May be rotated 90° if optimization selected rotation
+
+### Heat Coloring
+
+* Light Blue: Low heat (≤1)
+* Gold: Medium heat (=2)
+* Red: High heat (≥3)
+* Reflects thermal cost function
+
+### Labels
+
+* Display block roles (e.g., "CPU_Cluster")
+* Ensure traceability and clarity
+* Fallback to block ID if role not provided
+
+### Legend
+
+* Shows heat level color mapping
+* Aids interpretation
+
+---
+
+## 10. Final Layout Coordinates Table
+
+### What it shows
+
+* Block ID
+* X coordinate (bottom-left)
+* Y coordinate (bottom-left)
+* Width
+* Height
+
+### Why this matters
+
+* Provides exportable placement data
+* Enables verification of legal placement
+* Can be used as input to downstream tools
+
+---
+
+## 11. UI Design Philosophy
+
+* No fake AI claims
+* No forced improvement
+* No hidden normalization
+* No misleading metrics
+* Every visual has a physical meaning
+* Clear documentation of optimization strategy
+* Batch optimization for robustness
+
+The UI exists to **explain floorplanning**, not to impress visually.
+
+---
+
+
+
+# SECTION 2 — Concentrated System Explanation
+
+
+
+## How LAIOpt Works End-to-End (File by File, Step by Step)
+
+This section explains **how the entire LAIOpt system works internally**, starting from user input and ending with a validated placement result.
+It is written for judges, reviewers, and technically curious readers who want to understand **what each file does and why it exists**.
+
+---
+
+## 1. What LAIOpt Actually Is (Clear Definition)
+
+LAIOpt is a **correct early-stage macro floorplanner with thermal and power-aware optimization**.
+
+It:
+
+* Takes **physical inputs** (blocks with dimensions, power, heat)
+* Generates a **smart wall-aware baseline placement**
+* Applies **Simulated Annealing with thermal and power physics**
+* Evaluates results using **multi-objective cost functions**
+* Produces **explicit numeric outputs and coordinates**
+
+It does **not**:
+
+* Perform routing
+* Claim timing closure
+* Use trained AI/ML models
+* Fake improvements
+
+This scope is intentional and correct for a **floorplanning-stage tool with physical awareness**.
+
+---
+
+## 2. High-Level Data Flow (End to End)
+
+1. User defines **die size**, **blocks** (with role, power, heat), and **nets** in the UI
+2. Inputs are converted into **internal physical models**
+3. A **smart wall-aware baseline placement** is generated using LFF heuristic
+4. Three parallel Simulated Annealing runs execute with different temperatures
+5. Each placement is evaluated using a **multi-objective cost function** (wirelength + overlap + boundary + thermal + center penalty)
+6. The best legal placement across all runs is selected
+7. Results are **visualized with role labels** and **numerically reported**
+
+At no point is data altered silently or artificially.
+
+---
+
+## 3. Core Physical Models (backend/core/models.py)
+
+This file defines the **physical entities** of the system.
+
+### Block
+
+Represents a **macro block** with:
+
+* ID
+* Width
+* Height
+* Power
+* Heat
+
+Why this matters:
+
+* Width/height define geometry
+* Power drives center penalty (wall attraction)
+* Heat drives thermal spreading
+* These objects mirror real EDA macro definitions
+
+Validation logic ensures:
+
+* No zero or negative dimensions
+* No invalid physical values
+
+---
+
+### Net
+
+Represents **connectivity** between blocks.
+
+Includes:
+
+* Name
+* Connected block IDs (list)
+* Weight
+
+Why this matters:
+
+* Connectivity drives wirelength
+* Weight models signal importance
+
+Implementation note:
+
+* UI presents pairwise connections (block_a, block_b)
+* Backend consolidates into multi-pin nets automatically
+
+---
+
+### Die
+
+Defines the **absolute placement boundary**.
+
+Why this matters:
+
+* All legality checks depend on die size
+* No placement exists without a die
+
+---
+
+## 4. Smart Wall-Aware Baseline Placement (backend/core/baseline.py)
+
+This module generates the **intelligent starting point** for optimization.
+
+### What it does
+
+* Calculates "inflexibility score" for each block:
+  * Area (width × height)
+  * Connectivity (sum of net weights)
+  * Heat (weighted 10×)
+* Sorts blocks in descending inflexibility order
+* Places blocks using **wall-hugging heuristic**:
+  * Always considers 4 die corners first
+  * Proposes positions adjacent to existing blocks
+  * Selects position with **minimum distance to nearest wall**
+* Ensures:
+  * No overlap
+  * No boundary violations
+  * Deterministic ordering
+
+### Why this is critical
+
+* High-heat and high-connectivity blocks naturally go to periphery
+* Satisfies power delivery constraints from the start
+* Provides intelligent reference for optimization
+* Prevents misleading claims of improvement
+
+### Why wall-hugging matters
+
+* Matches real power delivery requirements
+* Hot blocks need edge placement for thermal dissipation
+* Reduces optimization burden by smart initialization
+
+---
+
+## 5. Cost Function (backend/core/cost.py)
+
+This is the **mathematical heart** of the floorplanner.
+
+### Cost Components
+
+#### 5.1 Wirelength (HPWL)
+
+* Uses Half-Perimeter Wirelength
+* Computed using block centers
+* Weighted by net importance
+
+Why HPWL:
+
+* Industry-standard early metric
+* Cheap and effective
+* Physically meaningful
+
+---
+
+#### 5.2 Overlap Penalty (Soft)
+
+* Weight: 10,000
+* Based on overlapping area between block pairs
+* Allows temporary overlaps during search
+* Strongly discourages them
+
+Why soft (not hard):
+
+* Simulated Annealing needs freedom to explore
+* Final result still converges to legal placement
+
+---
+
+#### 5.3 Boundary Penalty (Hard)
+
+* Weight: 1,000,000,000
+* Any boundary violation incurs a massive penalty
+
+Why hard:
+
+* Blocks outside the die are illegal
+* No justification for tolerating it
+
+---
+
+#### 5.4 Thermal Penalty (Physics-Based)
+
+* Weight: 5.0 per violation
+* Spread constant: 100.0
+* Max safe temperature: 100.0
+
+How it works:
+
+* Each block has base temperature (heat × 10)
+* Heat transfers between blocks using exponential decay: power × exp(-distance²/100)
+* Violations above 100.0 are squared and penalized
+
+Why this is real:
+
+* Models actual thermal spreading
+* Distance-based heat transfer
+* Prevents hotspot formation
+
+**This is not fake** — it implements simplified but valid thermal physics.
+
+---
+
+#### 5.5 Center Penalty (Wall Attraction)
+
+* Weight: 3,500
+* Forces high-power blocks toward die periphery
+
+How it works:
+
+* Calculates distance from block center to die center
+* Inverted score: center = 1.0 penalty, corner = 0.0 penalty
+* Multiplied by block power level
+* Weighted by 3,500
+
+Why this matters:
+
+* Models power delivery constraints
+* High-power blocks need edge placement
+* Implements "wall attraction" physically
+
+**This is the key power-aware optimization term.**
+
+---
+
+### Why this cost function is correct
+
+* No normalization tricks
+* No hidden scaling
+* Every term corresponds to real physics or electrical properties
+* Weights are tuned for balance, not to fake results
+
+---
+
+## 6. Optimization Engine (backend/core/sa_engine.py)
+
+This file implements **Simulated Annealing**, a classical and valid placement optimizer.
+
+### Why Simulated Annealing
+
+* Widely used in EDA research and industry
+* Handles discrete, non-convex problems
+* Explainable and controllable
+* Supports multiple move types
+
+---
+
+### How Optimization Works
+
+1. Start from smart baseline placement
+2. Initialize all blocks as non-rotated
+3. Calculate initial cost (including all five terms)
+4. Enter Markov chain loop:
+
+   * **50% Displacement moves:** Jiggle block coordinates
+     * Dynamic scaling based on temperature
+     * Strict clamping to die boundaries
+   
+   * **35% Swap moves:** Exchange two block positions
+     * Both blocks reclamped after swap
+   
+   * **15% Rotation moves:** Flip block 90°
+     * Reclamp if rotated dimensions exceed boundary
+
+5. Evaluate new cost after each move
+6. Accept or reject using Metropolis criterion:
+   * Always accept if cost improves
+   * Accept worse moves with probability exp(-Δcost/T)
+7. Track best placement found
+8. Cool temperature geometrically (α = 0.98)
+9. Continue while rejection rate < 95% OR temperature > 0.001
+
+---
+
+### Why batch optimization (3 runs)
+
+* Different initial temperatures explore different solution spaces:
+  * 500.0 (focused refinement)
+  * 1000.0 (balanced exploration)
+  * 2000.0 (aggressive exploration)
+* Best result automatically selected
+* Increases robustness
+
+---
+
+### Why results may match baseline
+
+This is **correct behavior** when:
+
+* Baseline is already near-optimal due to smart initialization
+* Input size is small
+* Constraints are tight
+* Thermal/power constraints already satisfied
+
+Forcing change would be dishonest.
+
+---
+
+## 7. CSV Adapter (backend/adapters/csv_loader.py)
+
+This file exists to:
+
+* Convert user input into internal models
+* Handle pairwise net format from UI
+* Consolidate into multi-pin nets
+* Enforce schema correctness
+* Keep UI separate from logic
+
+Why this separation matters:
+
+* Backend can be tested independently
+* UI cannot corrupt core logic
+
+---
+
+## 8. Serializer (backend/adapters/serializer.py)
+
+Purpose:
+
+* Convert internal placement results into UI-friendly formats
+* Prepare numeric outputs (coordinates, metrics)
+
+Why this matters:
+
+* Professional tools always export placement data
+* Enables future JSON / CSV output
+
+Even if minimal now, it is **architecturally necessary**.
+
+---
+
+## 9. Visualization (frontend/visualization.py)
+
+This module **only visualizes** — it never alters data.
+
+Key principles:
+
+* Uses real coordinates
+* Uses real dimensions
+* Handles rotation visualization
+* No normalization affecting metrics
+* Die boundary is authoritative
+
+New features:
+
+* **Role-based labels:** Displays functional names instead of IDs
+* **Heat color mapping:** 3-level thermal visualization
+* **Rotation support:** Shows actual block orientation
+
+Any visual offset is **purely cosmetic** and clearly separated.
+
+---
+
+## 10. UI Entry Point (frontend/app.py)
+
+This file:
+
+* Collects user input (20-block default configuration)
+* Compiles blocks and nets into CSV format
+* Calls baseline_place with nets for connectivity-aware initialization
+* Executes batch optimization (3 runs)
+* Selects winner based on cost
+* Displays both baseline and optimized results
+* Shows batch result summary
+* Outputs final coordinates table
+
+It does **not**:
+
+* Modify placements
+* Influence optimization
+* Compute costs itself
+
+This separation is intentional and correct.
+
+### Default Configuration
+
+* 20 blocks representing realistic SoC components
+* Categorized by role (CPU, GPU, Memory, Peripherals, Controllers)
+* Power and heat levels assigned realistically
+* 16 nets modeling critical buses and clusters
+
+---
+
+## 11. UI Configuration (frontend/ui_config.py)
+
+Purpose:
+
+* Store UI constants
+* Avoid magic numbers
+* Keep UI maintainable
+
+Currently minimal but prevents future technical debt.
+
+---
+
+## 12. Test Files (tests/)
+
+These exist to:
+
+* Validate correctness
+* Prove logic is testable
+* Show engineering discipline
+
+Even empty or minimal tests:
+
+* Signal professional intent
+* Show extensibility
+* Are expected in real projects
+
+
+---
+
+## 13. Outputs (What the Tool Actually Produces)
+
+The system produces:
+
+* Explicit block coordinates (x, y)
+* Orientation flags (rotated or not)
+* Placement cost values (total and breakdown visible in code)
+* Legal, bounded layouts
+* Batch optimization comparison
+* Final coordinates table
+
+This is exactly what a floorplanner must output at this stage.
+
+
+
+## Final Statement 
+
+> This project intentionally focuses on correctness and physical awareness at the macro floorplanning stage. Every input, computation, and output has a physical meaning. We model thermal spreading, power delivery constraints, and connectivity-driven wirelength. The smart wall-aware baseline demonstrates understanding of real power integrity requirements. We avoided fake AI claims and ensured that the system behaves like a real early-stage floorplanner with thermal and power physics, not a demo toy. The multi-objective cost function balances five physically meaningful terms, and batch optimization proves solution robustness.

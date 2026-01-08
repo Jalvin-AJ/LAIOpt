@@ -1,160 +1,93 @@
 """
 Visualization utilities for macro placement.
-
-This module provides safe, geometry-accurate plotting functions
-for baseline and optimized placements.
+Now supports custom text labels (e.g., Role names).
 """
 
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from matplotlib.patches import Patch
+from matplotlib.patches import Rectangle, Patch
 
 from laiopt.backend.core.models import Block, Die
 
 Placement = Dict[str, Tuple[float, float]]
-
+Orientations = Dict[str, bool]
 
 def _get_heat_color(heat: float) -> str:
-    """
-    Get color based on heat attribute.
-    
-    Args:
-        heat (float): Heat value
-        
-    Returns:
-        str: Color name
-    """
+    """Get color based on heat attribute."""
     if heat <= 1:
-        return "blue"
+        return "#add8e6"  # Light Blue (Cool)
     elif heat == 2:
-        return "yellow"
-    else:  # heat >= 3
-        return "red"
-
+        return "#ffd700"  # Gold (Warm)
+    else:
+        return "#ff6b6b"  # Light Red (Hot)
 
 def plot_placement(
     placement: Placement,
     blocks: List[Block],
     die: Die,
-    title: str = "Placement"
+    title: str = "Placement",
+    orientations: Optional[Orientations] = None,
+    labels: Optional[Dict[str, str]] = None  # <--- NEW ARGUMENT
 ):
     """
     Plot a macro placement within the die.
-
-    Args:
-        placement (Placement): Block ID -> (x, y)
-        blocks (List[Block]): Block definitions
-        die (Die): Die dimensions
-        title (str): Plot title
     """
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    # Calculate core region margin (uniform on all sides)
-    margin = 0.08 * min(die.width, die.height)
-    
-    # Draw die outline (thick black rectangle) from (0, 0) to (die.width, die.height)
+    # Margin and Outline
+    margin = 0.05 * min(die.width, die.height)
     ax.add_patch(
-        Rectangle(
-            (0, 0),
-            die.width,
-            die.height,
-            fill=False,
-            edgecolor="black",
-            linewidth=2
-        )
+        Rectangle((0, 0), die.width, die.height, fill=False, edgecolor="black", linewidth=2)
     )
     
-    # Draw core region (inset uniformly on all sides)
-    core_x = margin
-    core_y = margin
-    core_width = die.width - 2 * margin
-    core_height = die.height - 2 * margin
-    
-    ax.add_patch(
-        Rectangle(
-            (core_x, core_y),
-            core_width,
-            core_height,
-            fill=True,
-            facecolor="lightgray",
-            alpha=0.2,
-            edgecolor="gray",
-            linestyle="--",
-            linewidth=1.5
-        )
-    )
-
-    # Draw blocks (visually offset by core margin)
     block_dict = {b.id: b for b in blocks}
+    
     for block_id, (x, y) in placement.items():
+        if block_id not in block_dict:
+            continue
+            
         block = block_dict[block_id]
         color = _get_heat_color(block.heat)
         
-        # Apply visual offset: draw at (x + margin, y + margin)
-        visual_x = x + margin
-        visual_y = y + margin
-        
-        # Calculate halo dimensions (centered on block)
-        halo_margin = 0.12 * min(block.width, block.height)
-        halo_width = block.width + 2 * halo_margin
-        halo_height = block.height + 2 * halo_margin
-        
-        # Draw halo (behind the block)
-        halo_x = visual_x - halo_margin
-        halo_y = visual_y - halo_margin
-        halo_rect = Rectangle(
-            (halo_x, halo_y),
-            halo_width,
-            halo_height,
-            fill=False,
-            edgecolor="gray",
-            linestyle="--",
-            linewidth=1.0,
-            alpha=0.6
-        )
-        ax.add_patch(halo_rect)
-        
-        # Draw block rectangle
+        # Rotation Logic
+        is_rotated = orientations.get(block_id, False) if orientations else False
+        current_w = block.height if is_rotated else block.width
+        current_h = block.width if is_rotated else block.height
+
+        # Draw Block
         rect = Rectangle(
-            (visual_x, visual_y),
-            block.width,
-            block.height,
-            fill=True,
-            facecolor=color,
-            edgecolor="black",
-            linewidth=1.5,
-            alpha=0.6
+            (x, y), current_w, current_h,
+            fill=True, facecolor=color, edgecolor="black", linewidth=1.0, alpha=0.8
         )
         ax.add_patch(rect)
         
-        # Add text label with outline for readability (also offset)
+        # --- NEW LABEL LOGIC ---
+        # Use the Role Name if provided, otherwise use ID
+        display_text = labels.get(block_id, block_id) if labels else block_id
+        
+        # Determine text color (Black for light blocks, White for dark blocks if needed)
+        # For our colors, black text works best.
         ax.text(
-            visual_x + block.width / 2,
-            visual_y + block.height / 2,
-            block_id,
-            ha="center",
-            va="center",
-            fontsize=8,
-            color="black",
-            weight="bold",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7, edgecolor="none")
+            x + current_w / 2,
+            y + current_h / 2,
+            display_text,
+            ha="center", va="center", fontsize=7,
+            color="black", weight="bold",
+            clip_on=True
         )
-    
-    # Add legend
+
+    # Legend
     legend_elements = [
-        Patch(facecolor="blue", alpha=0.6, edgecolor="black", label="Low heat (≤1)"),
-        Patch(facecolor="yellow", alpha=0.6, edgecolor="black", label="Medium heat (=2)"),
-        Patch(facecolor="red", alpha=0.6, edgecolor="black", label="High heat (≥3)")
+        Patch(facecolor="#add8e6", label="Low Heat (1)"),
+        Patch(facecolor="#ffd700", label="Med Heat (2)"),
+        Patch(facecolor="#ff6b6b", label="High Heat (3)")
     ]
-    ax.legend(handles=legend_elements, loc="upper right", framealpha=0.9)
+    ax.legend(handles=legend_elements, loc="upper right", fontsize=8)
 
     ax.set_xlim(0, die.width)
     ax.set_ylim(0, die.height)
-    ax.set_aspect("equal", adjustable="box")
+    ax.set_aspect("equal")
     ax.set_title(title)
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
     ax.grid(True, linestyle="--", alpha=0.3)
 
     return fig
